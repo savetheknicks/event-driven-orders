@@ -38,12 +38,42 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
 
+  # Initialize Kafka topics
+  init-kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: init-kafka
+    depends_on:
+      - kafka
+    entrypoint: ['/bin/bash', '-c']
+    command: |
+      "
+      # Wait for Kafka to be ready
+      echo 'Waiting for Kafka @ kafka:29092 ...'
+      until kafka-topics --bootstrap-server kafka:29092 --list &>/dev/null; do
+        sleep 2
+      done
+      echo 'Kafka is up.'
+
+      echo -e 'Creating core kafka topics'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic orders --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=604800000
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic inventory --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=604800000
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic payments --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=604800000
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic shipping --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=604800000
+
+      echo -e 'Create DLQs kafka topics'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dlq.orders --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=2592000000
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dlq.inventory --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=2592000000
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dlq.payments --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=2592000000
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dlq.shipping --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=2592000000
+      "
+
   # Optional: Kafka UI for easier management
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     depends_on:
       - kafka
+      - init-kafka
     ports:
       - "8080:8080"
     environment:
